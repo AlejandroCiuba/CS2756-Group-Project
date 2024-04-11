@@ -2,34 +2,18 @@
 # Alejandro Ciuba, alejandrociuba@pitt.edu
 from collections import OrderedDict
 from torch.utils.data import (DataLoader,
-                              Dataset, )
+                              TensorDataset, )
 
 import torch
 
-import pandas as pd
+import numpy as np
 import torch.nn as nn
 
 
-class IterableDataset(Dataset):
-
-    X: torch.Tensor
-    y: torch.Tensor
-
-    def __init__(self, X, y):
-
-        super().__init__()
-
-        self.X = X
-        self.y = y
-
-    def __len__(self) -> int:
-        return len(self.X)
-    
-    def __getitem__(self, index):
-        return self.X[index, :], self.y[index]
-
-
 class FFNN:
+    """
+    FFNN with numpy inputs
+    """
 
     model: nn.Module
     steps: OrderedDict
@@ -70,7 +54,7 @@ class FFNN:
 
         self.batch_size = batch_size
         
-        dataset = IterableDataset(X, y)
+        dataset = TensorDataset(X if isinstance(X, torch.Tensor) else torch.from_numpy(X), y if isinstance(y, torch.Tensor) else torch.from_numpy(y))
         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)
 
         n_total_steps = len(dataloader)
@@ -94,10 +78,12 @@ class FFNN:
 
     def predict(self, X) -> tuple[list, list]:
 
-        dataset = IterableDataset(X, torch.zeros(X.shape[0]))
+        dataset = TensorDataset(X if isinstance(X, torch.Tensor) else torch.from_numpy(X), torch.zeros(X.shape[0]))
         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)
 
         with torch.no_grad():
+
+            preds = None
 
             for X, y in dataloader:
 
@@ -105,6 +91,7 @@ class FFNN:
                 y = y.to(self.device)
                 outputs = self.model(X)
 
-                _, preds = torch.max(outputs, 1)
+                _, batch_preds = torch.max(outputs, 1)
+                preds = torch.cat([preds, batch_preds]) if preds is not None else batch_preds
 
-            return list(preds)
+            return preds.to(device="cpu").numpy()

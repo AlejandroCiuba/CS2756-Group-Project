@@ -63,7 +63,7 @@ class Experiment:
 
         return self.test_y, self.model.predict(self.test_X)
 
-    def full_run(self, metrics: dict[str, tuple[Any, dict[str, Any]]], **kwargs):
+    def full_run(self, metrics: dict[str, tuple[Any, dict[str, Any]]], post = None, **kwargs):
         """
         Parameters
         ---
@@ -76,6 +76,8 @@ class Experiment:
 
         `**kwargs`: `Any
             Any arguments for the `Experiment.train` method.
+            Also a `"post"` method for y_true and y_pred if applicable.
+            Useful if you need to have your outputs match for certain metrics.
 
         Returns
         ---
@@ -88,6 +90,10 @@ class Experiment:
 
         # Get test results
         y_true, y_pred = self.test()
+
+        if post:
+            y_true, y_pred = post(y_true, y_pred)
+
         return {name: metrics[name][0](y_true, y_pred, **metrics[name][1]) for name in metrics}
 
 
