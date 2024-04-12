@@ -4,6 +4,8 @@ from collections import Counter
 from gensim.models.doc2vec import (TaggedDocument,
                                    Doc2Vec, )
 from gensim.utils import simple_preprocess
+from pathlib import Path
+from tqdm import tqdm
 
 import argparse
 
@@ -11,9 +13,9 @@ import pandas as pd
 
 
 PATH = "../data/final-splits.csv"
-EPOCHS = 50
 
-def main():
+
+def main(args: argparse.Namespace):
 
     data = pd.read_csv(PATH)
 
@@ -21,10 +23,10 @@ def main():
     # test = [simple_preprocess(row.utterance) for row in data[data["split"] == "TEST"].itertuples()]
 
     # Unsure if BLAS is installed
-    model = Doc2Vec(vector_size=75, min_count=1)
+    model = Doc2Vec(vector_size=args.vector, min_count=1)
     model.build_vocab(train)
 
-    model.train(train, total_examples=model.corpus_count, epochs=EPOCHS)
+    model.train(train, total_examples=model.corpus_count, epochs=args.epochs)
 
     ranks = []
     second_ranks = []
@@ -41,33 +43,35 @@ def main():
 
     print(counter)
 
-    model.save("../data/doc2vec.bin")
+    file: Path = args.save / f"doc2vec-{args.vector}-{args.epochs}.bin"
+
+    model.save(str(file.absolute()))
 
 
 def add_args(parser: argparse.ArgumentParser):
 
     parser.add_argument(
-        "-s",
-        "--size",
+        "-v",
+        "--vector",
         default=75,
         type=int,
         help="Vector size.\n \n",
     )
 
     parser.add_argument(
-        "-s",
-        "--size",
-        default=75,
+        "-e",
+        "--epochs",
+        default=50,
         type=int,
-        help="Vector size.\n \n",
+        help="Epochs.\n \n",
     )
 
     parser.add_argument(
         "-s",
-        "--size",
-        default=75,
-        type=int,
-        help="Vector size.\n \n",
+        "--save",
+        default=Path("../data/"),
+        type=Path,
+        help="File save path.\n \n",
     )
 
 if __name__ == "__main__":
