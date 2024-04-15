@@ -1,6 +1,7 @@
 # Simply neural models for the text experiments
 # Alejandro Ciuba, alejandrociuba@pitt.edu
-from collections import OrderedDict
+from collections import (OrderedDict,
+                         defaultdict, )
 from torch.utils.data import (DataLoader,
                               TensorDataset, )
 
@@ -18,49 +19,48 @@ class FFNN:
     model: nn.Module
     steps: OrderedDict
 
-    num_classes: int
+    binary: bool
+
+    lr: float
+    epochs: int
     batch_size: int
 
     device: str
 
-    crit = None
-    opt = None
+    loss_record = None
+    sampler = None
 
-    def __init__(self, input_size: int, hidden_sizes: list[int], num_classes: int, lr: float) -> None:
+    loss = None
+    optimizer = None
 
-        self.num_classes = num_classes
+    def __init__(self, **config) -> None:
+
+        self.lr = config['lr']
+        self.epochs = config['epochs']
+        self.batch_size = config['batch_size']
+
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-        steps = [("l1", nn.Linear(input_size, hidden_sizes[0])),
-                 ("relu1", nn.ReLU()), ]
 
-        for i, size in enumerate(hidden_sizes):
-
-            if i == len(hidden_sizes) - 1:
-                continue
-
-            steps.append((f"l{i+2}", nn.Linear(size, hidden_sizes[i + 1])))
-            steps.append((f"relu{i+2}", nn.ReLU()))
-        
-        steps.append((f"l{len(hidden_sizes)+1}", nn.Linear(hidden_sizes[-1], num_classes)))
-
-        self.steps = OrderedDict(steps)
+        self.steps = OrderedDict(config['steps'])
         self.model = nn.Sequential(self.steps)
         self.model.to(self.device)
 
-        self.crit = nn.CrossEntropyLoss()
-        self.opt = torch.optim.Adam(params=self.model.parameters(), lr=lr)
+        self.loss = nn.BCEWithLogitsLoss() if config['binary'] else nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=self.lr)
 
-    def fit(self, X, y, epochs: int, batch_size: int):
+        self.sampler = config['sampler'] if 'sampler' in config else None
+        self.loss_record = defaultdict(list)
 
-        self.batch_size = batch_size
+    def fit(self, X, y, step_track: int = 10, verbose: bool = True):
+
+        self.batch_size = self.batch_size
         
         dataset = TensorDataset(X if isinstance(X, torch.Tensor) else torch.from_numpy(X), y if isinstance(y, torch.Tensor) else torch.from_numpy(y))
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, sampler=self.sampler)
 
         n_total_steps = len(dataloader)
 
-        for epoch in range(epochs):
+        for epoch in range(self.epochs):
             
             for i, (X, y) in enumerate(dataloader):
 
@@ -68,14 +68,20 @@ class FFNN:
                 y = y.to(self.device)
 
                 outputs = self.model(X)
-                loss = self.crit(outputs, y)
+                loss = self.loss(outputs, y)
 
-                self.opt.zero_grad()
+                self.optimizer.zero_grad()
                 loss.backward()
-                self.opt.step()
+                self.optimizer.step()
 
-                if (i + 1) % 100 == 0:
-                    print('epoch: %d/%d, step: %d/%d, loss=%.4ff' % (epoch+1, epochs, i+1, n_total_steps, loss.item()))
+                if (i + 1) % (n_total_steps // step_track) == 0:
+
+                    if verbose:
+                        print('epoch: %d/%d, step: %d/%d, loss=%.4ff' % (epoch+1, self.epochs, i+1, n_total_steps, loss.item()))
+
+                    self.loss_record['epoch'].append(epoch)
+                    self.loss_record['step'].append((i + 1) / n_total_steps)
+                    self.loss_record['loss'].append(loss.item())
 
     def predict(self, X) -> tuple[list, list]:
 

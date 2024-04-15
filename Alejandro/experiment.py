@@ -74,6 +74,9 @@ class Experiment:
             {"accuracy": (accuracy_score, {}), }
             ```
 
+        `post`: `func`
+            Any post processing of the form `def <func>(y_true, y_preds) -> tuple[y_true, y_pred]`.
+
         `**kwargs`: `Any
             Any arguments for the `Experiment.train` method.
             Also a `"post"` method for y_true and y_pred if applicable.
