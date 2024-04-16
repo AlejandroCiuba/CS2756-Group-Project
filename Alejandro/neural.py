@@ -56,7 +56,7 @@ class FFNN:
         self.batch_size = self.batch_size
         
         dataset = TensorDataset(X if isinstance(X, torch.Tensor) else torch.from_numpy(X), y if isinstance(y, torch.Tensor) else torch.from_numpy(y))
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, sampler=self.sampler)
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True if self.sampler is None else False, num_workers=4, sampler=self.sampler)
 
         n_total_steps = len(dataloader)
 
