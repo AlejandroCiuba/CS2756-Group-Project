@@ -94,7 +94,10 @@ class Neural:
                 y = y.to(self.device)
                 outputs = prob_layer(self.model(X))
 
-                _, batch_preds = torch.max(outputs, 1)
+                batch_preds = torch.argmax(outputs, 1)
+                print()
+                print(outputs)
+                print(batch_preds)
 
                 preds = torch.cat([preds, batch_preds]) if preds is not None else batch_preds
 
