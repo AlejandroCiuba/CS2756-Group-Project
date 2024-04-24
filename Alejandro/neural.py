@@ -1,5 +1,6 @@
 # Simply neural models for the text experiments
 # Alejandro Ciuba, alejandrociuba@pitt.edu
+from __future__ import annotations
 from collections import defaultdict
 from gensim.models import KeyedVectors
 from nltk import word_tokenize
@@ -95,11 +96,28 @@ class Neural:
                 outputs = prob_layer(self.model(X))
 
                 batch_preds = torch.argmax(outputs, 1)
-                print()
-                print(outputs)
-                print(batch_preds)
 
                 preds = torch.cat([preds, batch_preds]) if preds is not None else batch_preds
+
+            return preds.to(device="cpu").numpy()
+        
+    def predict_proba(self, X) -> tuple[list, list]:
+
+        dataset = TensorDataset(X if isinstance(X, torch.Tensor) else torch.from_numpy(X), torch.zeros(X.shape[0]))
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)
+        prob_layer = nn.Softmax()
+
+        with torch.no_grad():
+
+            preds = None
+
+            for X, y in dataloader:
+
+                X = X.to(self.device)
+                y = y.to(self.device)
+                outputs = prob_layer(self.model(X))
+
+                preds = torch.cat([preds, outputs]) if preds is not None else outputs
 
             return preds.to(device="cpu").numpy()
 
@@ -218,6 +236,7 @@ class Word2VecEmbeddings:
 
     vocab: set
     total: int
+    dim: int
     word2ind: dict
     ind2word: dict
     randvecs: list  # Track which words were not found in your W2V embedding
@@ -242,8 +261,8 @@ class Word2VecEmbeddings:
                 self.add_word(tok)
 
         # Get the vectors
-        vec_dim = self.w2v["hello"].shape[0]
-        arrays = np.zeros((self.total, vec_dim), dtype=np.float32)
+        self.dim = self.w2v["hello"].shape[0]
+        arrays = np.zeros((self.total, self.dim), dtype=np.float32)
 
         for word in self.vocab:
 
@@ -252,17 +271,24 @@ class Word2VecEmbeddings:
 
             else:
 
-                arrays[self.word2ind[word]] = np.random.randn(vec_dim)
+                arrays[self.word2ind[word]] = np.random.randn(self.dim)
                 self.randvecs.append(word)
 
         # Add the padding vector
-        arrays[self.word2ind[self.PAD]] = np.zeros(vec_dim, dtype=np.float32)
+        arrays[self.word2ind[self.PAD]] = np.zeros(self.dim, dtype=np.float32)
 
         arrays = torch.from_numpy(arrays)
 
         # Put it in the embedding layer
         self.embedding = nn.Embedding.from_pretrained(arrays, freeze=True, 
                                                       padding_idx=self.word2ind[self.PAD])
+
+    @classmethod
+    def from_glove(cls, sents, file: str, dim: int = 100) -> Word2VecEmbeddings:
+        """
+        Turn gloVe textfile embeddings into `Word2VecEmbeddings`
+        """
+        return cls(sents, from_glove(file, dim))
 
     def __call__(self, words: list[str]):
         """
@@ -294,6 +320,30 @@ class Word2VecEmbeddings:
 
         return self.embedding(inds)
 
+
+def from_glove(file: str, dim: int = 100) -> KeyedVectors:
+    """
+    Gets the gloVe embeddings from the provided text file and turns them into the `Word2VecEmbeddings` class.
+    """
+
+    words = dict()
+    with open(file, 'r') as src:
+
+        for line in src:
+
+            parts = line.split()
+            word, vec = parts[0], [float(c) for c in parts[1:]]
+            vec = np.array(vec)
+            words[word] = vec
+
+    kv = KeyedVectors(100, len(words))
+    
+    keys, vecs = zip(*words.items())
+    kv.add_vectors(list(keys), list(vecs))  # Guarantees order; I'm unsure of just using words.keys(), words.items()
+
+    return kv
+
+
 if __name__ == "__main__":
 
     test = ["Hello, there everyone!",
@@ -303,10 +353,20 @@ if __name__ == "__main__":
             "And one more for good measure...", ]
     
     WORD2VEC_PATH = "../data/word2vec/GoogleNews-vectors-negative300.bin"   
+    GLOVE_PATH = "../data/glove/glove.6B.100d.txt"   
+
     W2V: KeyedVectors = KeyedVectors.load_word2vec_format(WORD2VEC_PATH, binary=True)
 
     embs = Word2VecEmbeddings(test, W2V)
 
+    print(embs.total, embs.embedding, embs.vocab, embs.randvecs)
+
+    print(embs.encode(test + ["new word beans!"], out=8).shape)
+
+    kv = from_glove(GLOVE_PATH, 100)
+    print(kv.similar_by_key("robot"))
+
+    embs = Word2VecEmbeddings.from_glove(test, GLOVE_PATH, 100)
     print(embs.total, embs.embedding, embs.vocab, embs.randvecs)
 
     print(embs.encode(test + ["new word beans!"], out=8).shape)

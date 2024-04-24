@@ -85,7 +85,7 @@ class Experiment:
         Returns
         ---
 
-        A `dict` containing the metric name and its output.
+        A `tuple` containing two `dict` objects with the metric name and its output for the testing and training split.
         """
 
         # Train the model
@@ -94,17 +94,24 @@ class Experiment:
         # Get test results
         y_true, y_pred = self.test()
 
+        # Get train results
+        y_true_train, y_pred_train = self.test(subset="train")
+
         if post:
             y_true, y_pred = post(y_true, y_pred)
+            y_true_train, y_pred_train = post(y_true_train, y_pred_train)
 
-        return {name: metrics[name][0](y_true, y_pred, **metrics[name][1]) for name in metrics}
+        test_metrics = {name: metrics[name][0](y_true, y_pred, **metrics[name][1]) for name in metrics}
+        train_metrics = {name: metrics[name][0](y_true_train, y_pred_train, **metrics[name][1]) for name in metrics}
+
+        return test_metrics, train_metrics
 
 
 def plot_confusion_matrix(cm, labels):
     """
     Plots the confusion matrix (thanks to Dr. Na-Rae Han).
     """
-    sns.heatmap(cm, square=True, annot=True, fmt='d', cbar=True, cmap="Reds", 
+    sns.heatmap(cm, square=True, annot=True, fmt='d', cbar=True, cmap="Blues", 
                 xticklabels=labels, yticklabels=labels)
     plt.xlabel('predicted label')
     plt.ylabel('true label')
